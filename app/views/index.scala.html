@@ -1,0 +1,68 @@
+@()(implicit request: RequestHeader)
+
+
+<!DOCTYPE html>
+
+<html>
+<head>
+    <title>Reactive Stock News Dashboard</title>
+    <link rel='stylesheet' href='@routes.Assets.at("lib/bootstrap/css/bootstrap.min.css")'>
+    <link rel="stylesheet" media="screen" href="@routes.Assets.at("stylesheets/main.css")">
+    <link rel="shortcut icon" type="image/png" href="@routes.Assets.at("images/favicon.png")">
+    <script type='text/javascript' src='@routes.Assets.at("lib/jquery/jquery.min.js")'></script>
+    <script type='text/javascript' src='@routes.Assets.at("javascripts/index.js")'></script>
+
+    <style type="text/css">
+        .container {
+        width: 500px;
+        clear: both;
+        }
+        .container input {
+        width: 100%;
+        clear: both;
+        }
+
+        .cell {
+            align: center;
+            bgcolor: #0000FF;
+            width=20px;
+            height=8px;
+        }
+    </style>
+</head>
+<body data-ws-url="@routes.Application.ws.webSocketURL">
+    <div id=wrapper">
+                <div class="container">
+                    <form id="simulation-form">
+                        <ul>
+                        <li>
+                        Rows:
+                        <input id="rows" type="text">
+                        </li>
+                        <li>
+                            Columns:
+                            <input id="columns" type="text">
+                  </li>
+                        <li>
+                        Fish population:
+                        <input id="fishNum" type="text">
+                        </li>
+
+                        <li>
+                        Shark population:
+                        <input id="sharkNum" type="text">
+                        </li>
+                        <li>
+                        Heartbeat:
+                        <input id="chronosFrequency" type="text">
+                        </li>
+                        <button type="submit" class="btn btn-lg btn-primary">Start simulation</button>
+                        </ul>
+                    </form>
+                </div>
+
+    <div id="watorGrid">
+
+    </div>
+</body>
+</html>
