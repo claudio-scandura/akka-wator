@@ -1,4 +1,4 @@
-name := "simple-wator"
+name := "akka-wator"
 
 version := "1.0"
 
