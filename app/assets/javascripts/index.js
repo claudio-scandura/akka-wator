@@ -68,7 +68,6 @@
        var cell = $("#"+data.position.row + "-" + data.position.column);
        oldCell.attr("bgcolor", "#0000FF");
        cell.attr("bgcolor", color);
-//       document.createElement("<div style=\"position: absolute; left: "+row+"px; top: "+column+"px; width: 1px; height: 1px; background-color: red;\"></div>");
        return;
       };
 

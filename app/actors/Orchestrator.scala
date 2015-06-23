@@ -5,13 +5,18 @@ import java.util.concurrent.TimeUnit
 import actors.Fish.Tick
 import actors.Orchestrator.StartSimulation
 import actors.PlanetManager.messages.requests.GetRandomPosition
+import actors.fsm.Cell.Fill
 import akka.actor._
 import akka.pattern.ask
 import controllers.SimulationParameters
 
-import scala.collection.immutable.Iterable
+import scala.collection.immutable.{IndexedSeq, Iterable}
+import scala.collection.mutable.Queue
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.FiniteDuration
+import scala.util.Random
+import fsm._
+import fsm.{Fish => FSMFish, Shark => FSMShark}
 
 class Orchestrator extends Actor with ActorLogging {
   private var simulationStarted = false
@@ -20,30 +25,31 @@ class Orchestrator extends Actor with ActorLogging {
 
   implicit val timeout = akka.util.Timeout(2000, TimeUnit.MILLISECONDS)
 
+  def availablePositions(rows: Int, columns: Int): Queue[Position] = Queue(Random.shuffle(
+    for {
+      row <- (0 until rows)
+      column <- (0 until columns)
+    } yield Position(row, column)
+  ): _*)
+
+  private def actorRefFor(position: Position): ActorSelection = context.system.actorSelection(s"/user/orchestrator/${position.row}-${position.column}")
+
   private def startSimulation(params: SimulationParameters, outChannel: ActorRef) = if (!simulationStarted) {
     simulationStarted = true
-    planetManager = context.system.actorOf(Props(new PlanetManager(params.rows, params.columns)))
-    log.info("Requesting random positions to positionCalculator...")
-    (1 to params.sharkPopulation) foreach { i =>
-      val shark = context.actorOf(Props(new Shark(planetManager, Some(outChannel))), s"shark-$i")
-      planetManager ? GetRandomPosition(shark, forShark = true) map {
-        case Some(position: Position) =>
-          log.info(s"Fish $shark was successfully assigned position $position")
-        case _ =>
-          log.debug("Looks like there are no more available positions in the planet. I Will kill this animal.")
-          shark ! PoisonPill
-      }
-    }
 
-    (1 to params.fishPopulation).foreach { i =>
-      val fish = context.actorOf(Props(Fish(planetManager, outChannel)), s"fish-$i")
-      planetManager ? GetRandomPosition(fish, forShark = false) map {
-        case Some(position: Position) =>
-          log.info(s"Fish $fish was successfully assigned position $position")
-        case _ =>
-          log.debug("Looks like there are no more available positions in the planet. I Will kill this animal.")
-          fish ! PoisonPill
-      }
+    val cells = for {
+      row <- (0 until params.rows)
+      column <- (0 until params.columns)
+    } yield context.actorOf(Props(new Cell(Position(row, column), params.rows, params.columns, Some(channelOut))), s"$row-$column")
+
+    val randomPositions = availablePositions(params.rows, params.columns)
+    val sharks = (1 to params.sharkPopulation) map (_ => 'Shark)
+    val fish = (1 to params.fishPopulation) map (_ => 'Fish)
+    val sharkAndFishShuffled = Random.shuffle(sharks ++ fish)
+    sharkAndFishShuffled foreach {
+      case 'Shark => actorRefFor(randomPositions.dequeue()) ! Fill(FSMShark)
+      case 'Fish => actorRefFor(randomPositions.dequeue()) ! Fill(FSMFish)
+      case _ => Unit
     }
 
     context.system.scheduler.schedule(
