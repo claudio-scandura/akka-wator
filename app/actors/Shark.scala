@@ -1,12 +1,13 @@
 package actors
 
-import actors.Fish.{Tick, Devour, AssignPosition}
-import actors.Messages.{TooLate, Dead}
+import actors.Fish.{AssignPosition, Devour, Tick}
+import actors.Messages.{Dead, TooLate}
 import actors.PlanetManager.messages.requests.{CompleteAttack, GetNextMove}
 import actors.PlanetManager.messages.responses.{AttackFish, MoveToPosition}
 import actors.Shark.CannotEatShark
 import akka.actor._
 import akka.pattern.ask
+
 import scala.concurrent.ExecutionContext.Implicits.global
 
 class Shark(planetManager: ActorRef, wsOut: Option[ActorRef] = None) extends Fish(null, planetManager, wsOut) {

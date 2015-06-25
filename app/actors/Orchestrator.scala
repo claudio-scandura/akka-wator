@@ -4,19 +4,16 @@ import java.util.concurrent.TimeUnit
 
 import actors.Fish.Tick
 import actors.Orchestrator.StartSimulation
-import actors.PlanetManager.messages.requests.GetRandomPosition
 import actors.fsm.Cell.Fill
+import actors.fsm.{Fish => FSMFish, Shark => FSMShark, _}
 import akka.actor._
-import akka.pattern.ask
 import controllers.SimulationParameters
 
-import scala.collection.immutable.{IndexedSeq, Iterable}
+import scala.collection.immutable.Iterable
 import scala.collection.mutable.Queue
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.FiniteDuration
 import scala.util.Random
-import fsm._
-import fsm.{Fish => FSMFish, Shark => FSMShark}
 
 class Orchestrator extends Actor with ActorLogging {
   private var simulationStarted = false

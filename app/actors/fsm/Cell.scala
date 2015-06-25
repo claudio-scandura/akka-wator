@@ -8,7 +8,6 @@ import actors.fsm.Cell.{Fill, Ko, Ok}
 import akka.actor._
 import akka.pattern.ask
 import play.api.libs.json.Json
-import play.api.mvc.WebSocket
 
 import scala.collection.Set
 import scala.util.Random
@@ -58,8 +57,6 @@ class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef])
 
   private val neighbours = neighboursOf(position)
 
-//  lazy val position = cellPositionFor(self)
-
   private final val PositionRegex = """.*(\d+)-(\d+)""".r
 
   private lazy val neighboursRefs: Set[ActorSelection] = neighbours.keySet.map(actorRefFor)
@@ -77,33 +74,38 @@ class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef])
   }
 
   def becomeFish: Unit = {
+    log.info("Becoming fish")
     become(fish)
+    notifyNewPosition(position, "fish")
+    advertiseStateToNeighbours(Fish)
   }
 
   def becomeShark: Unit = {
+    log.info("Becoming shark")
     become(shark)
+    notifyNewPosition(position, "shark")
+    advertiseStateToNeighbours(Shark)
   }
 
   def becomeWater: Unit = {
+    log.info("Becoming shark")
     become(water)
+    advertiseStateToNeighbours(Water)
+    notifyNewPosition(position, "water")
   }
 
   def water: Receive = {
     case Tick => tickAs(Water)
     case neighbourStatusUpdate: CellContent => updateNeighbourState(neighbourStatusUpdate, sender)
     case Fill(Fish) =>
-      log.info("Becoming fish")
       becomeFish
-      notifyNewPosition(position, "fish")
-      advertiseStateToNeighbours(Fish)
       sender ! Ok
     case Fill(Shark) =>
-      log.info("Becoming shark")
-      notifyNewPosition(position, "shark")
       becomeShark
-      advertiseStateToNeighbours(Shark)
       sender ! Ok
-    case msg => log.info(s"Empty cell has no behaviour defined for message $msg")
+    case msg =>
+      log.info(s"Empty cell has no behaviour defined for message $msg")
+      sender ! Ko
   }
 
   def fish: Receive = {
@@ -132,12 +134,9 @@ class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef])
       actorRefFor(position) ? Fill(Fish) onSuccess {
         case Ok =>
           log.info(s"Fish moved from ${this.position} to $position")
-          notifyNewPosition(position, "fish")
-          advertiseStateToNeighbours(Water)
           becomeWater
         case msg =>
           log.info(s"Failed to move fish from ${this.position} to $position. Result was $msg")
-          self ! Tick
       }
     } getOrElse {
       log.info(s"No available positions around $position. Fish is staying here")
@@ -147,8 +146,6 @@ class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef])
       actorRefFor(position) ? Fill(Shark) onSuccess {
         case Ok =>
           log.info(s"Shark moved from ${this.position} to $position")
-          notifyNewPosition(position, "shark")
-          advertiseStateToNeighbours(Water)
           becomeWater
         case msg =>
           log.info(s"Failed to move Shark from ${this.position} to $position. Result was $msg")

@@ -5,9 +5,8 @@ import java.util.concurrent.TimeUnit
 
 import actors.Fish.{AssignPosition, Devour, Tick}
 import actors.Messages._
-import actors.PlanetManager.messages.requests.{CompleteAttack, FreePosition, GetNextMove}
-import actors.PlanetManager.messages.responses.{AttackFish, MoveToPosition}
-import actors.Shark.CannotEatShark
+import actors.PlanetManager.messages.requests.{FreePosition, GetNextMove}
+import actors.PlanetManager.messages.responses.MoveToPosition
 import akka.actor._
 import akka.pattern._
 import play.api.libs.json.Json
