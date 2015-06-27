@@ -38,6 +38,9 @@ object Cell {
 
 }
 
+trait PositiveRandomNumberGen {
+  def nextRandomNumber = math.abs(Random.nextInt)
+}
 
 /**
  *
@@ -48,18 +51,20 @@ object Cell {
  * every cell actor will now in what state its neighbours are. This information will be used to calculate the next move.
  *
  */
-class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef]) extends Actor with ActorLogging {
+class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef]) extends Actor with ActorLogging with PositiveRandomNumberGen {
 
   implicit val timeout = akka.util.Timeout(2000, TimeUnit.MILLISECONDS)
 
 
   import scala.collection.mutable.Map
 
-  private val neighbours = neighboursOf(position)
+  private[fsm] val systemPath = "/user/orchestrator/"
+
+  private[fsm] val neighbours: Map[Position, CellContent] = neighboursOf(position)
 
   private final val PositionRegex = """.*(\d+)-(\d+)""".r
 
-  private lazy val neighboursRefs: Set[ActorSelection] = neighbours.keySet.map(actorRefFor)
+  private[fsm] lazy val neighboursRefs: Set[ActorSelection] = neighbours.keySet.map(actorRefFor)
 
   import context._
 
@@ -73,30 +78,28 @@ class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef])
     )
   }
 
-  def becomeFish: Unit = {
+  private def becomeFish: Unit = {
     log.info("Becoming fish")
     become(fish)
     notifyNewPosition(position, "fish")
     advertiseStateToNeighbours(Fish)
   }
 
-  def becomeShark: Unit = {
+  private def becomeShark: Unit = {
     log.info("Becoming shark")
     become(shark)
     notifyNewPosition(position, "shark")
     advertiseStateToNeighbours(Shark)
   }
 
-  def becomeWater: Unit = {
+  private def becomeWater: Unit = {
     log.info("Becoming shark")
     become(water)
     advertiseStateToNeighbours(Water)
     notifyNewPosition(position, "water")
   }
 
-  def water: Receive = {
-    case Tick => tickAs(Water)
-    case neighbourStatusUpdate: CellContent => updateNeighbourState(neighbourStatusUpdate, sender)
+  def water: Receive = tickAndReceiveNeighboursUpdatesAs(Water) orElse {
     case Fill(Fish) =>
       becomeFish
       sender ! Ok
@@ -108,9 +111,7 @@ class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef])
       sender ! Ko
   }
 
-  def fish: Receive = {
-    case Tick => tickAs(Fish)
-    case neighbourStatusUpdate: CellContent => updateNeighbourState(neighbourStatusUpdate, sender)
+  def fish: Receive = tickAndReceiveNeighboursUpdatesAs(Fish) orElse {
     case Fill(Fish) =>
       sender ! Ko
     case Fill(Shark) =>
@@ -120,11 +121,14 @@ class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef])
     case msg => log.info(s"Fish cell has no behaviour defined for message $msg")
   }
 
-  def shark: Receive = {
-    case Tick => tickAs(Shark)
-    case neighbourStatusUpdate: CellContent => updateNeighbourState(neighbourStatusUpdate, sender)
+  def shark: Receive = tickAndReceiveNeighboursUpdatesAs(Shark) orElse {
     case Fill(Fish | Shark) => sender ! Ko
     case msg => log.info(s"Shark cell has no behaviour defined for message $msg")
+  }
+
+  def tickAndReceiveNeighboursUpdatesAs(content: CellContent): Receive = {
+    case Tick => tickAs(content)
+    case neighbourStatusUpdate: CellContent => updateNeighbourState(neighbourStatusUpdate, sender)
   }
 
   override def receive: Receive = water
@@ -159,7 +163,7 @@ class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef])
 
   private def availableEmptyCell: Option[Position] = {
     val emptyCells = neighbours.filter(_._2.isEmpty).keySet.toSeq
-    if (emptyCells.nonEmpty) Some(emptyCells(math.abs(Random.nextInt) % emptyCells.size)) else None
+    if (emptyCells.nonEmpty) Some(emptyCells(nextRandomNumber % emptyCells.size)) else None
   }
 
   private def availableFishCell: Option[Position] = {
@@ -167,7 +171,7 @@ class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef])
       case (pos, Fish) => true
       case _ => false
     }.keySet.toSeq
-    if (emptyCells.nonEmpty) Some(emptyCells(math.abs(Random.nextInt) % emptyCells.size)) else None
+    if (emptyCells.nonEmpty) Some(emptyCells(nextRandomNumber % emptyCells.size)) else None
   }
 
   def updateNeighbourState(content: CellContent, ref: ActorRef): Unit = neighbours.put(cellPositionFor(ref), content)
@@ -178,7 +182,7 @@ class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef])
   /**
    * if actor cell has position <i, j> then its ActoPath will be /user/grid/i-j
    */
-  private def actorRefFor(position: Position): ActorSelection = system.actorSelection(s"/user/orchestrator/${position.row}-${position.column}")
+  private[fsm] def actorRefFor(position: Position): ActorSelection = system.actorSelection(s"$systemPath${position.row}-${position.column}")
 
   private def cellPositionFor(actor: ActorRef): Position = actor.path.toString match {
     case PositionRegex(row, column) => Position(row.toInt, column.toInt)
