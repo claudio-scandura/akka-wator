@@ -80,7 +80,7 @@ class CellAsyncSpec extends TestKit(ActorSystem("TestWatorSystem")) with WordSpe
 
   "An empty actor cell" should {
 
-    "response Ok, send a notificationMessage to the UI actor and advertise the new state to the neigbhours" when {
+    "respond Ok, send a notificationMessage to the UI actor and advertise the new state to the neigbhours" when {
 
       "receiving a Fill(shark) message" in new Setup {
         startAndStopCell {
@@ -88,7 +88,7 @@ class CellAsyncSpec extends TestKit(ActorSystem("TestWatorSystem")) with WordSpe
 
           val result = wsOutProbe.expectMsgAnyClassOf(classOf[JsObject])
           (result \ "animal").as[String] shouldBe "shark"
-          (result \ "oldPosition").as[Position] shouldBe position
+          (result \ "position").as[Position] shouldBe position
 
           neighbourProbe.expectMsg[CellContent](Shark)
         }
@@ -100,7 +100,7 @@ class CellAsyncSpec extends TestKit(ActorSystem("TestWatorSystem")) with WordSpe
 
           val result = wsOutProbe.expectMsgAnyClassOf(classOf[JsObject])
           (result \ "animal").as[String] shouldBe "fish"
-          (result \ "oldPosition").as[Position] shouldBe position
+          (result \ "position").as[Position] shouldBe position
 
           neighbourProbe.expectMsg[CellContent](Fish)
         }
@@ -140,7 +140,7 @@ class CellAsyncSpec extends TestKit(ActorSystem("TestWatorSystem")) with WordSpe
 
           val result = wsOutProbe.expectMsgAnyClassOf(classOf[JsObject])
           (result \ "animal").as[String] shouldBe "shark"
-          (result \ "oldPosition").as[Position] shouldBe position
+          (result \ "position").as[Position] shouldBe position
 
           neighbourProbe.expectMsg[CellContent](Shark)
         }
@@ -155,7 +155,7 @@ class CellAsyncSpec extends TestKit(ActorSystem("TestWatorSystem")) with WordSpe
 
           val result = wsOutProbe.expectMsgAnyClassOf(classOf[JsObject])
           (result \ "animal").as[String] shouldBe "water"
-          (result \ "oldPosition").as[Position] shouldBe position
+          (result \ "position").as[Position] shouldBe position
 
           neighbourProbe.expectMsg[CellContent](Water)
         }
@@ -230,7 +230,7 @@ class CellAsyncSpec extends TestKit(ActorSystem("TestWatorSystem")) with WordSpe
 
           val result = wsOutProbe.expectMsgAnyClassOf(classOf[JsObject])
           (result \ "animal").as[String] shouldBe "water"
-          (result \ "oldPosition").as[Position] shouldBe position
+          (result \ "position").as[Position] shouldBe position
 
           neighbourProbe.expectMsg[CellContent](Water)
         }
@@ -250,7 +250,7 @@ class CellAsyncSpec extends TestKit(ActorSystem("TestWatorSystem")) with WordSpe
 
           val result = wsOutProbe.expectMsgAnyClassOf(classOf[JsObject])
           (result \ "animal").as[String] shouldBe "water"
-          (result \ "oldPosition").as[Position] shouldBe position
+          (result \ "position").as[Position] shouldBe position
 
           neighbourProbe.expectMsg[CellContent](Water)
         }

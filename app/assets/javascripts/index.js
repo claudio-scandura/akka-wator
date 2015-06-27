@@ -53,7 +53,7 @@
            td.setAttribute("align", "center");
            td.setAttribute("bgcolor", "#0000FF");
            td.width='20';
-           td.height='8';
+           td.height='20';
            td.appendChild(document.createTextNode(" "));
            tr.appendChild(td);
        }
@@ -63,10 +63,11 @@
     }
 
     updateGrid = function(data) {
-       var color =  (data.animal == "fish")? "#008000" : "#FF0000";
-       var oldCell = $("#"+data.oldPosition.row + "-" + data.oldPosition.column);
+       var color;
+       if (data.animal == "fish") color = "#008000";
+       else if (data.animal == "shark") color = "#FF0000";
+       else color = "#0000FF"
        var cell = $("#"+data.position.row + "-" + data.position.column);
-       oldCell.attr("bgcolor", "#0000FF");
        cell.attr("bgcolor", color);
        return;
       };

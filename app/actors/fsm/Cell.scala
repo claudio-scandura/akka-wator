@@ -39,7 +39,7 @@ object Cell {
 }
 
 trait PositiveRandomNumberGen {
-  def nextRandomNumber = math.abs(Random.nextInt)
+  def nextRandomNumber = math.abs(Random.nextInt) * 1000000
 }
 
 /**
@@ -81,22 +81,22 @@ class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef])
   private def becomeFish: Unit = {
     log.info("Becoming fish")
     become(fish)
-    notifyNewPosition(position, "fish")
+    notifyNewPosition("fish")
     advertiseStateToNeighbours(Fish)
   }
 
   private def becomeShark: Unit = {
     log.info("Becoming shark")
     become(shark)
-    notifyNewPosition(position, "shark")
+    notifyNewPosition("shark")
     advertiseStateToNeighbours(Shark)
   }
 
   private def becomeWater: Unit = {
-    log.info("Becoming shark")
+    log.info("Becoming water")
     become(water)
     advertiseStateToNeighbours(Water)
-    notifyNewPosition(position, "water")
+    notifyNewPosition("water")
   }
 
   def water: Receive = tickAndReceiveNeighboursUpdatesAs(Water) orElse {
@@ -115,6 +115,7 @@ class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef])
     case Fill(Fish) =>
       sender ! Ko
     case Fill(Shark) =>
+      log.info(s"Fish $position has just been eaten")
       becomeShark
       advertiseStateToNeighbours(Shark)
       sender ! Ok
@@ -167,11 +168,11 @@ class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef])
   }
 
   private def availableFishCell: Option[Position] = {
-    val emptyCells = neighbours.filter {
+    val fishCells = neighbours.filter {
       case (pos, Fish) => true
       case _ => false
     }.keySet.toSeq
-    if (emptyCells.nonEmpty) Some(emptyCells(nextRandomNumber % emptyCells.size)) else None
+    if (fishCells.nonEmpty) Some(fishCells(nextRandomNumber % fishCells.size)) else None
   }
 
   def updateNeighbourState(content: CellContent, ref: ActorRef): Unit = neighbours.put(cellPositionFor(ref), content)
@@ -180,7 +181,7 @@ class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef])
 
 
   /**
-   * if actor cell has position <i, j> then its ActoPath will be /user/grid/i-j
+   * if actor cell has position <i, j> then its ActorPath will be /user/grid/i-j
    */
   private[fsm] def actorRefFor(position: Position): ActorSelection = system.actorSelection(s"$systemPath${position.row}-${position.column}")
 
@@ -189,10 +190,10 @@ class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef])
     case string => throw new RuntimeException(s"Could not extract position from: \'$string\'")
   }
 
-  def notifyNewPosition(newPosition: Position, as: String): Unit = wsOut foreach { channel =>
+  def notifyNewPosition(as: String): Unit = wsOut foreach { channel =>
     channel ! Json.obj("status" -> "update", "animal" -> as,
-      "position" -> Json.toJson(newPosition),
-      "oldPosition" -> Json.toJson(this.position))
+      "position" -> Json.toJson(this.position)
+    )
   }
 
 }

@@ -22,13 +22,13 @@ class CellSyncSpec  extends TestKit(ActorSystem("TestWatorSystem")) with Matcher
     "set a neighbour content to Shark" in new Setup {
       val neighbour = TestActorRef("2-3")
       cell.underlyingActor.updateNeighbourState(Shark, neighbour)
-      cell.underlyingActor.neighbours should contain(Position(2, 3) -> Water)
+      cell.underlyingActor.neighbours should contain(Position(2, 3) -> Shark)
     }
 
-    "set a neighbour content to water" in new Setup {
+    "set a neighbour content to fish" in new Setup {
       val neighbour = TestActorRef("2-3")
       cell.underlyingActor.updateNeighbourState(Fish, neighbour)
-      cell.underlyingActor.neighbours should contain(Position(2, 3) -> Water)
+      cell.underlyingActor.neighbours should contain(Position(2, 3) -> Fish)
     }
   }
 

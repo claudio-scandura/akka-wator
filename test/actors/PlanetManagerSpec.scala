@@ -51,7 +51,7 @@ class PlanetManagerSpec extends TestKit(ActorSystem("WatorSystem")) with WordSpe
     }
   }
 
-  "Getting a random position" should {
+  "Getting a random position" ignore {
     "return a random free position and mark it as occupied if there is a free position" in new Setup {
       val result = (planetManager ? GetRandomPosition(fakeAssignee)).futureValue
       result shouldBe a[Some[_]]
@@ -89,7 +89,7 @@ class PlanetManagerSpec extends TestKit(ActorSystem("WatorSystem")) with WordSpe
     }
   }
 
-  "Asking for a new move" when {
+  "Asking for a new move" ignore {
 
     "requested by a fish" should {
 
