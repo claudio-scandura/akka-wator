@@ -9,7 +9,7 @@ import akka.pattern.ask
 import model._
 import play.api.libs.json.Json
 
-import scala.util.Random
+import scala.util.{Random, Try}
 
 
 object Cell {
@@ -111,9 +111,7 @@ with ActorLogging with PositiveRandomNumberGen with HeartBeat {
   }
 
   def tickAndReceiveNeighboursUpdatesAs(content: CellContent): Receive = {
-    case Tick =>
-      log.info(s"position: $position, neighbours: $neighbours, neighoursRefs: $neighboursRefs")
-      tickAs(content)
+    case Tick => tickAs(content)
     case neighbourStatusUpdate: CellContent => updateNeighbourState(neighbourStatusUpdate, sender)
   }
 
@@ -162,8 +160,9 @@ with ActorLogging with PositiveRandomNumberGen with HeartBeat {
 
   def updateNeighbourState(content: CellContent, ref: ActorRef): Unit = {
     val neighbourPosition = cellPositionFor(ref)
-    val directionFromThisPosition = Direction.directionOfNeighbour(position, neighbourPosition)
-    neighbours.put(directionFromThisPosition, content)
+    Try(Direction.directionOfNeighbour(position, neighbourPosition)).toOption foreach { directionFromThisPosition =>
+      neighbours.put(directionFromThisPosition, content)
+    }
   }
 
   private def advertiseStateToNeighbours(state: CellContent): Unit = neighboursRefs.values foreach (_ ! state)
