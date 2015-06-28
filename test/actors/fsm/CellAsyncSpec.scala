@@ -44,12 +44,13 @@ class CellAsyncSpec extends TestKit(ActorSystem("TestWatorSystem")) with WordSpe
     class CellForTest(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef], neighbourProbeSelection: ActorSelection, initialState: CellContent) extends Cell(position, rows, columns, wsOut) {
       import scala.collection.mutable.Map
 
-      override def nextRandomNumber: Int = stubRandomNumber
+      override def nextRandomNumber(range: Range): Int = stubRandomNumber
 
       override private[fsm] def actorRefFor(position: Position): ActorSelection = neighbourProbeSelection
 
       override private[fsm] lazy val neighboursRefs: Set[ActorSelection] = Set(neighbourProbeSelection)
 
+      override def startHeartBeat: Cancellable = null
 
       override private[fsm] val neighbours: Map[Position, CellContent] = {
         def circularIndex(index: Int, bound: Int) = (index + bound) % bound

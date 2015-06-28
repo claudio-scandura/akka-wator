@@ -11,8 +11,6 @@ import controllers.SimulationParameters
 
 import scala.collection.immutable.Iterable
 import scala.collection.mutable.Queue
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration.FiniteDuration
 import scala.util.Random
 
 class Orchestrator extends Actor with ActorLogging {
@@ -37,7 +35,7 @@ class Orchestrator extends Actor with ActorLogging {
     val cells = for {
       row <- (0 until params.rows)
       column <- (0 until params.columns)
-    } yield context.actorOf(Props(new Cell(Position(row, column), params.rows, params.columns, Some(channelOut))), s"$row-$column")
+    } yield context.actorOf(Props(new Cell(Position(row, column), params.rows, params.columns, Some(channelOut), params.chronosFrequency)), s"$row-$column")
 
     val randomPositions = availablePositions(params.rows, params.columns)
     val sharks = (1 to params.sharkPopulation) map (_ => 'Shark)
@@ -48,13 +46,6 @@ class Orchestrator extends Actor with ActorLogging {
       case 'Fish => actorRefFor(randomPositions.dequeue()) ! Fill(FSMFish)
       case _ => Unit
     }
-
-    context.system.scheduler.schedule(
-      FiniteDuration(2, TimeUnit.SECONDS),
-      FiniteDuration(params.chronosFrequency, TimeUnit.MILLISECONDS),
-      self,
-      Tick
-    )
 
   }
 

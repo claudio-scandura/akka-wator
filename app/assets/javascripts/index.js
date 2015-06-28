@@ -38,7 +38,7 @@
     var myTableDiv = document.getElementById("watorGrid");
 
     var table = document.createElement('TABLE');
-    table.border='1';
+    table.border='0';
 
     var tableBody = document.createElement('TBODY');
     table.appendChild(tableBody);
@@ -52,8 +52,8 @@
            td.setAttribute("id", i+"-"+j)
            td.setAttribute("align", "center");
            td.setAttribute("bgcolor", "#0000FF");
-           td.width='20';
-           td.height='20';
+           td.width='2';
+           td.height='2';
            td.appendChild(document.createTextNode(" "));
            tr.appendChild(td);
        }

@@ -39,7 +39,7 @@ object Cell {
 }
 
 trait PositiveRandomNumberGen {
-  def nextRandomNumber = math.abs(Random.nextInt) * 1000000
+  def nextRandomNumber(range: Range) = Random.nextInt(range.length)
 }
 
 /**
@@ -51,10 +51,10 @@ trait PositiveRandomNumberGen {
  * every cell actor will now in what state its neighbours are. This information will be used to calculate the next move.
  *
  */
-class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef]) extends Actor with ActorLogging with PositiveRandomNumberGen {
+class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef], val heartBeatFrequency: Int = 1000) extends Actor
+              with ActorLogging with PositiveRandomNumberGen with HeartBeat {
 
   implicit val timeout = akka.util.Timeout(2000, TimeUnit.MILLISECONDS)
-
 
   import scala.collection.mutable.Map
 
@@ -66,9 +66,11 @@ class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef])
 
   private[fsm] lazy val neighboursRefs: Set[ActorSelection] = neighbours.keySet.map(actorRefFor)
 
+  startHeartBeat
+
   import context._
 
-  private def neighboursOf(position: Position): Map[Position, CellContent] = {
+  private[fsm] def neighboursOf(position: Position): Map[Position, CellContent] = {
     def circularIndex(index: Int, bound: Int) = (index + bound) % bound
     Map(
       Position(circularIndex(position.row - 1, rows), position.column) -> Water, //north
@@ -164,7 +166,7 @@ class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef])
 
   private def availableEmptyCell: Option[Position] = {
     val emptyCells = neighbours.filter(_._2.isEmpty).keySet.toSeq
-    if (emptyCells.nonEmpty) Some(emptyCells(nextRandomNumber % emptyCells.size)) else None
+    if (emptyCells.nonEmpty) Some(emptyCells(nextRandomNumber(0 until emptyCells.size))) else None
   }
 
   private def availableFishCell: Option[Position] = {
@@ -172,10 +174,15 @@ class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef])
       case (pos, Fish) => true
       case _ => false
     }.keySet.toSeq
-    if (fishCells.nonEmpty) Some(fishCells(nextRandomNumber % fishCells.size)) else None
+    if (fishCells.nonEmpty) Some(fishCells(nextRandomNumber(0 until fishCells.size))) else None
   }
 
-  def updateNeighbourState(content: CellContent, ref: ActorRef): Unit = neighbours.put(cellPositionFor(ref), content)
+  def updateNeighbourState(content: CellContent, ref: ActorRef): Unit = {
+    val neighbourPosition = cellPositionFor(ref)
+    if (neighbours.contains(neighbourPosition)){
+      neighbours.put(cellPositionFor(ref), content)
+    }
+  }
 
   private def advertiseStateToNeighbours(state: CellContent): Unit = neighboursRefs foreach (_ ! state)
 
