@@ -33,7 +33,8 @@ class CellSyncSpec extends TestKit(ActorSystem("TestWatorSystem")) with Matchers
 
     "throw exception and do not set a neighbour content to a new state if the position is not neighbouring" in new Setup {
       val neighbour = TestActorRef("2-3")
-      an[IllegalArgumentException] shouldBe thrownBy (cell.underlyingActor.updateNeighbourState(Fish, neighbour))
+      cell.underlyingActor.updateNeighbourState(Fish, neighbour)
+      cell.underlyingActor.neighbours.values should not contain(Fish)
     }
   }
 }
