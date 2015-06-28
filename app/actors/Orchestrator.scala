@@ -5,9 +5,10 @@ import java.util.concurrent.TimeUnit
 import actors.Fish.Tick
 import actors.Orchestrator.StartSimulation
 import actors.fsm.Cell.Fill
-import actors.fsm.{Fish => FSMFish, Shark => FSMShark, _}
+import model.{Fish => FSMFish, Shark => FSMShark, Position}
 import akka.actor._
 import controllers.SimulationParameters
+import actors.fsm.Cell
 
 import scala.collection.immutable.Iterable
 import scala.collection.mutable.Queue
@@ -35,6 +36,7 @@ class Orchestrator extends Actor with ActorLogging {
     val cells = for {
       row <- (0 until params.rows)
       column <- (0 until params.columns)
+
     } yield context.actorOf(Props(new Cell(Position(row, column), params.rows, params.columns, Some(channelOut), params.chronosFrequency)), s"$row-$column")
 
     val randomPositions = availablePositions(params.rows, params.columns)

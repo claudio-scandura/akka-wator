@@ -8,6 +8,7 @@ import actors.PlanetManager.model.Animal
 import akka.actor.{Actor, ActorLogging, ActorSystem}
 import akka.pattern.ask
 import akka.testkit.{TestActorRef, TestKit}
+import model.Position
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 

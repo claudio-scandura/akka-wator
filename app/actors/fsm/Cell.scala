@@ -3,30 +3,15 @@ package actors.fsm
 import java.util.concurrent.TimeUnit
 
 import actors.Fish.Tick
-import actors.Position
-import actors.fsm.Cell.{Fill, Ko, Ok}
+import actors.fsm.Cell.{Fill, Kick, Ko, Ok}
 import akka.actor._
 import akka.pattern.ask
+import model._
 import play.api.libs.json.Json
 
 import scala.collection.Set
 import scala.util.Random
 
-sealed trait CellContent {
-  def isEmpty: Boolean
-}
-
-sealed trait Animal extends CellContent {
-  override def isEmpty: Boolean = false
-}
-
-case object Water extends CellContent {
-  override def isEmpty: Boolean = true
-}
-
-case object Fish extends Animal
-
-case object Shark extends Animal
 
 object Cell {
 
@@ -36,7 +21,10 @@ object Cell {
 
   case object Ko
 
+  case object Kick
+
 }
+
 
 trait PositiveRandomNumberGen {
   def nextRandomNumber(range: Range) = Random.nextInt(range.length)
@@ -66,6 +54,9 @@ class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef],
 
   private[fsm] lazy val neighboursRefs: Set[ActorSelection] = neighbours.keySet.map(actorRefFor)
 
+  def initNeighbourRefs = {
+
+  }
   startHeartBeat
 
   import context._
@@ -134,7 +125,9 @@ class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef],
     case neighbourStatusUpdate: CellContent => updateNeighbourState(neighbourStatusUpdate, sender)
   }
 
-  override def receive: Receive = water
+  override def receive: Receive = {
+    case Kick => ???
+  }
 
   private[fsm] def tickAs(cellContent: CellContent): Unit = cellContent match {
     case Fish => availableEmptyCell map { position =>

@@ -9,6 +9,7 @@ import actors.PlanetManager.messages.responses.MoveToPosition
 import akka.actor.ActorSystem
 import akka.pattern.ask
 import akka.testkit.{TestActorRef, TestKit, TestProbe}
+import model.Position
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 

@@ -9,16 +9,12 @@ import actors.PlanetManager.messages.requests.{FreePosition, GetNextMove}
 import actors.PlanetManager.messages.responses.MoveToPosition
 import akka.actor._
 import akka.pattern._
+import model.Position
 import play.api.libs.json.Json
 import utils.AdjacencyCalculator
 
 import scala.concurrent.ExecutionContext.Implicits.global
 
-
-case class Position(row: Int, column: Int)
-object Position {
-  implicit val format = Json.format[Position]
-}
 
 class Fish(var position: Position, planetManager: ActorRef, wsOut: Option[ActorRef] = None) extends Actor with ActorLogging with AdjacencyCalculator  {
 

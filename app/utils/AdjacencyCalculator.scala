@@ -1,6 +1,6 @@
 package utils
 
-import actors.Position
+import model.Position
 
 case class WatorBoundaries(rows: Int = 10, columns: Int = 10)
 

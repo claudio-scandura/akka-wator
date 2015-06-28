@@ -1,6 +1,6 @@
 package utils
 
-import actors.Position
+import model.Position
 import org.scalatest.{Matchers, WordSpec}
 
 class AdjacencyCalculatorSpec extends WordSpec with Matchers {

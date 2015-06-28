@@ -1,8 +1,8 @@
 package actors.fsm
 
-import actors.Position
 import akka.actor.ActorSystem
 import akka.testkit.{TestActorRef, TestKit}
+import model._
 import org.scalatest.{Matchers, WordSpecLike}
 
 class CellSyncSpec extends TestKit(ActorSystem("TestWatorSystem")) with Matchers with WordSpecLike {

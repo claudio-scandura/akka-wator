@@ -5,6 +5,7 @@ import actors.PlanetManager.messages.requests.{CompleteAttack, FreePosition, Get
 import actors.PlanetManager.messages.responses.{AttackFish, Move, MoveToPosition}
 import actors.PlanetManager.model.Animal
 import akka.actor.{Actor, ActorLogging, ActorRef}
+import model.Position
 
 import scala.collection.mutable.{Map, Queue}
 import scala.util.{Random, Try}

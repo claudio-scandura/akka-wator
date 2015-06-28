@@ -3,11 +3,11 @@ package actors.fsm
 import java.util.concurrent.TimeUnit
 
 import actors.Fish.Tick
-import actors.Position
 import actors.fsm.Cell.{Fill, Ko, Ok}
 import akka.actor._
 import akka.pattern.ask
 import akka.testkit.{TestActorRef, TestKit, TestProbe}
+import model.{CellContent, _}
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 import play.api.libs.json.JsObject

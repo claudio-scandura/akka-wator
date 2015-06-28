@@ -7,6 +7,7 @@ import actors.PlanetManager.messages.responses.{AttackFish, MoveToPosition}
 import actors.Shark.CannotEatShark
 import akka.actor._
 import akka.pattern.ask
+import model._
 
 import scala.concurrent.ExecutionContext.Implicits.global
 
