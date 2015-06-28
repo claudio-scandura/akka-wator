@@ -3,13 +3,12 @@ package actors.fsm
 import java.util.concurrent.TimeUnit
 
 import actors.Fish.Tick
-import actors.fsm.Cell.{Fill, Kick, Ko, Ok}
+import actors.fsm.Cell.{Fill, Ko, Ok}
 import akka.actor._
 import akka.pattern.ask
 import model._
 import play.api.libs.json.Json
 
-import scala.collection.Set
 import scala.util.Random
 
 
@@ -40,36 +39,27 @@ trait PositiveRandomNumberGen {
  *
  */
 class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef], val heartBeatFrequency: Int = 1000) extends Actor
-              with ActorLogging with PositiveRandomNumberGen with HeartBeat {
+with ActorLogging with PositiveRandomNumberGen with HeartBeat {
 
   implicit val timeout = akka.util.Timeout(2000, TimeUnit.MILLISECONDS)
 
-  import scala.collection.mutable.Map
+  import scala.collection.mutable.{Map => MutableMap}
+
+  implicit private val boundaries = PlanetBoundaries(rows, columns)
 
   private[fsm] val systemPath = "/user/orchestrator/"
 
-  private[fsm] val neighbours: Map[Position, CellContent] = neighboursOf(position)
+  private[fsm] val neighbours: MutableMap[Direction, CellContent] = MutableMap(North -> Water, East -> Water, South -> Water, West -> Water)
 
   private final val PositionRegex = """.*(\d+)-(\d+)""".r
 
-  private[fsm] lazy val neighboursRefs: Set[ActorSelection] = neighbours.keySet.map(actorRefFor)
-
-  def initNeighbourRefs = {
-
+  private[fsm] lazy val neighboursRefs: Map[Direction, ActorSelection] = neighbours.toMap map {
+    case (direction, _) => (direction -> actorRefFor(Direction.neighbourPositionFromDirection(position, direction)))
   }
+
   startHeartBeat
 
   import context._
-
-  private[fsm] def neighboursOf(position: Position): Map[Position, CellContent] = {
-    def circularIndex(index: Int, bound: Int) = (index + bound) % bound
-    Map(
-      Position(circularIndex(position.row - 1, rows), position.column) -> Water, //north
-      Position(circularIndex(position.row + 1, rows), position.column) -> Water, //south
-      Position(position.row, circularIndex(position.column + 1, columns)) -> Water, //east
-      Position(position.row, circularIndex(position.column - 1, columns)) -> Water //west
-    )
-  }
 
   private def becomeFish: Unit = {
     log.info("Becoming fish")
@@ -121,34 +111,34 @@ class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef],
   }
 
   def tickAndReceiveNeighboursUpdatesAs(content: CellContent): Receive = {
-    case Tick => tickAs(content)
+    case Tick =>
+      log.info(s"position: $position, neighbours: $neighbours, neighoursRefs: $neighboursRefs")
+      tickAs(content)
     case neighbourStatusUpdate: CellContent => updateNeighbourState(neighbourStatusUpdate, sender)
   }
 
-  override def receive: Receive = {
-    case Kick => ???
-  }
+  override def receive: Receive = water
 
   private[fsm] def tickAs(cellContent: CellContent): Unit = cellContent match {
-    case Fish => availableEmptyCell map { position =>
-      actorRefFor(position) ? Fill(Fish) onSuccess {
+    case Fish => availableEmptyCell map { direction =>
+      neighboursRefs(direction) ? Fill(Fish) onSuccess {
         case Ok =>
-          log.info(s"Fish moved from ${this.position} to $position")
+          log.info(s"Fish moved from ${this.position} to $direction")
           becomeWater
         case msg =>
-          log.info(s"Failed to move fish from ${this.position} to $position. Result was $msg")
+          log.info(s"Failed to move fish from ${this.position} to $direction. Result was $msg")
       }
     } getOrElse {
       log.info(s"No available positions around $position. Fish is staying here")
     }
 
-    case Shark => (availableFishCell orElse availableEmptyCell) map { position =>
-      actorRefFor(position) ? Fill(Shark) onSuccess {
+    case Shark => (availableFishCell orElse availableEmptyCell) map { direction =>
+      neighboursRefs(direction) ? Fill(Shark) onSuccess {
         case Ok =>
-          log.info(s"Shark moved from ${this.position} to $position")
+          log.info(s"Shark moved from ${this.position} to $direction")
           becomeWater
         case msg =>
-          log.info(s"Failed to move Shark from ${this.position} to $position. Result was $msg")
+          log.info(s"Failed to move Shark from ${this.position} to $direction. Result was $msg")
       }
     } getOrElse {
       log.info(s"No available positions around $position. Shark is staying here")
@@ -157,12 +147,12 @@ class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef],
     case _ => log.info("Empty cell will not react to tick message")
   }
 
-  private def availableEmptyCell: Option[Position] = {
+  private def availableEmptyCell: Option[Direction] = {
     val emptyCells = neighbours.filter(_._2.isEmpty).keySet.toSeq
     if (emptyCells.nonEmpty) Some(emptyCells(nextRandomNumber(0 until emptyCells.size))) else None
   }
 
-  private def availableFishCell: Option[Position] = {
+  private def availableFishCell: Option[Direction] = {
     val fishCells = neighbours.filter {
       case (pos, Fish) => true
       case _ => false
@@ -172,18 +162,18 @@ class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef],
 
   def updateNeighbourState(content: CellContent, ref: ActorRef): Unit = {
     val neighbourPosition = cellPositionFor(ref)
-    if (neighbours.contains(neighbourPosition)){
-      neighbours.put(cellPositionFor(ref), content)
-    }
+    val directionFromThisPosition = Direction.directionOfNeighbour(position, neighbourPosition)
+    neighbours.put(directionFromThisPosition, content)
   }
 
-  private def advertiseStateToNeighbours(state: CellContent): Unit = neighboursRefs foreach (_ ! state)
+  private def advertiseStateToNeighbours(state: CellContent): Unit = neighboursRefs.values foreach (_ ! state)
 
 
   /**
    * if actor cell has position <i, j> then its ActorPath will be /user/grid/i-j
    */
-  private[fsm] def actorRefFor(position: Position): ActorSelection = system.actorSelection(s"$systemPath${position.row}-${position.column}")
+  private[fsm] def actorRefFor(position: Position): ActorSelection =
+    system.actorSelection(s"$systemPath${position.row}-${position.column}")
 
   private def cellPositionFor(actor: ActorRef): Position = actor.path.toString match {
     case PositionRegex(row, column) => Position(row.toInt, column.toInt)

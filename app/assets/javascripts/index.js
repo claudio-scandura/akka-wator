@@ -52,8 +52,8 @@
            td.setAttribute("id", i+"-"+j)
            td.setAttribute("align", "center");
            td.setAttribute("bgcolor", "#0000FF");
-           td.width='2';
-           td.height='2';
+           td.width='20';
+           td.height='20';
            td.appendChild(document.createTextNode(" "));
            tr.appendChild(td);
        }

@@ -4,11 +4,11 @@ import java.util.concurrent.TimeUnit
 
 import actors.Fish.Tick
 import actors.Orchestrator.StartSimulation
+import actors.fsm.Cell
 import actors.fsm.Cell.Fill
-import model.{Fish => FSMFish, Shark => FSMShark, Position}
 import akka.actor._
 import controllers.SimulationParameters
-import actors.fsm.Cell
+import model.{Position, Fish => FSMFish, Shark => FSMShark}
 
 import scala.collection.immutable.Iterable
 import scala.collection.mutable.Queue

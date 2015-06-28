@@ -12,7 +12,6 @@ import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 import play.api.libs.json.JsObject
 
-import scala.collection.Set
 import scala.concurrent.duration.FiniteDuration
 
 class CellAsyncSpec extends TestKit(ActorSystem("TestWatorSystem")) with WordSpecLike with BeforeAndAfterAll with ScalaFutures with Matchers with Eventually {
@@ -42,23 +41,27 @@ class CellAsyncSpec extends TestKit(ActorSystem("TestWatorSystem")) with WordSpe
     val neighbourProbe = TestProbe()
 
     class CellForTest(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef], neighbourProbeSelection: ActorSelection, initialState: CellContent) extends Cell(position, rows, columns, wsOut) {
-      import scala.collection.mutable.Map
+      import scala.collection.mutable.{Map => MutableMap}
 
       override def nextRandomNumber(range: Range): Int = stubRandomNumber
 
       override private[fsm] def actorRefFor(position: Position): ActorSelection = neighbourProbeSelection
 
-      override private[fsm] lazy val neighboursRefs: Set[ActorSelection] = Set(neighbourProbeSelection)
+      override private[fsm] lazy val neighboursRefs: Map[Direction, ActorSelection] = Map(
+        North -> neighbourProbeSelection,
+        West -> neighbourProbeSelection,
+        East -> neighbourProbeSelection,
+        South -> neighbourProbeSelection
+      )
 
       override def startHeartBeat: Cancellable = null
 
-      override private[fsm] val neighbours: Map[Position, CellContent] = {
-        def circularIndex(index: Int, bound: Int) = (index + bound) % bound
-        Map(
-          Position(circularIndex(position.row - 1, rows), position.column) -> northState, //north
-          Position(circularIndex(position.row + 1, rows), position.column) -> southState, //south
-          Position(position.row, circularIndex(position.column + 1, columns)) -> eastState, //east
-          Position(position.row, circularIndex(position.column - 1, columns)) -> westState //west
+      override private[fsm] val neighbours: MutableMap[Direction, CellContent] = {
+        MutableMap(
+          North -> northState,
+          South -> southState,
+          East -> eastState,
+          West -> westState
         )
       }
 
