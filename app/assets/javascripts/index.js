@@ -17,6 +17,15 @@
           return console.log(message);
       }
     };
+
+    $("#stop-simulation").click(function() {
+       ws.send(JSON.stringify({stop: true}));
+       $("#simulation-form").attr("style", "");
+       $("#watorGrid").attr("style", "display:none;");
+       $("#planet").remove();
+       return;
+    });
+
     return $("#simulation-form").submit(function(event) {
       event.preventDefault();
       var rows = parseInt($("#rows").val());
@@ -28,16 +37,19 @@
         fishPopulation: parseInt($("#fishNum").val()),
         chronosFrequency: parseInt($("#chronosFrequency").val())
       }));
+      $("#watorGrid").attr("style", "")
       addTable(rows, columns);
       return;
     });
+
   });
 
     function addTable(rows, columns) {
 
-    var myTableDiv = document.getElementById("watorGrid");
+    var myTableDiv = document.getElementById("table");
 
     var table = document.createElement('TABLE');
+    table.id = "planet";
     table.border='0';
 
     var tableBody = document.createElement('TBODY');
@@ -72,79 +84,4 @@
        return;
       };
 
-  getPricesFromArray = function(data) {
-    var v, _i, _len, _results;
-    _results = [];
-    for (_i = 0, _len = data.length; _i < _len; _i++) {
-      v = data[_i];
-      _results.push(v[1]);
-    }
-    return _results;
-  };
-
-  getChartArray = function(data) {
-    var i, v, _i, _len, _results;
-    _results = [];
-    for (i = _i = 0, _len = data.length; _i < _len; i = ++_i) {
-      v = data[i];
-      _results.push([i, v]);
-    }
-    return _results;
-  };
-
-  getChartOptions = function(data) {
-    return {
-      series: {
-        shadowSize: 0
-      },
-      yaxis: {
-        min: getAxisMin(data),
-        max: getAxisMax(data)
-      },
-      xaxis: {
-        show: false
-      }
-    };
-  };
-
-  getAxisMin = function(data) {
-    return Math.min.apply(Math, data) * 0.9;
-  };
-
-  getAxisMax = function(data) {
-    return Math.max.apply(Math, data) * 1.1;
-  };
-
-  populateStockHistory = function(message) {
-    var chart, chartHolder, detailsHolder, flipContainer, flipper, plot;
-    chart = $("<div>").addClass("chart").prop("id", message.symbol);
-    chartHolder = $("<div>").addClass("chart-holder").append(chart);
-    chartHolder.append($("<p>").text("values are simulated"));
-    detailsHolder = $("<div>").addClass("details-holder");
-    flipper = $("<div>").addClass("flipper").append(chartHolder).append(detailsHolder).attr("data-content", message.symbol);
-    flipContainer = $("<div>").addClass("flip-container").append(flipper);
-    $("#stocks").prepend(flipContainer);
-    return plot = chart.plot([getChartArray(message.history)], getChartOptions(message.history)).data("plot");
-  };
-
-  updateStockChart = function(message) {
-    var data, plot, yaxes;
-    if ($("#" + message.symbol).size() > 0) {
-      plot = $("#" + message.symbol).data("plot");
-      data = getPricesFromArray(plot.getData()[0].data);
-      data.shift();
-      data.push(message.price);
-      plot.setData([getChartArray(data)]);
-      yaxes = plot.getOptions().yaxes[0];
-      if ((getAxisMin(data) < yaxes.min) || (getAxisMax(data) > yaxes.max)) {
-        yaxes.min = getAxisMin(data);
-        yaxes.max = getAxisMax(data);
-        plot.setupGrid();
-      }
-      return plot.draw();
-    }
-  };
-
 }).call(this);
-
-//# sourceMappingURL=index.js.map

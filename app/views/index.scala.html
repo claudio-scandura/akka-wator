@@ -5,7 +5,7 @@
 
 <html>
 <head>
-    <title>Reactive Stock News Dashboard</title>
+    <title>Wator</title>
     <link rel='stylesheet' href='@routes.Assets.at("lib/bootstrap/css/bootstrap.min.css")'>
     <link rel="stylesheet" media="screen" href="@routes.Assets.at("stylesheets/main.css")">
     <link rel="shortcut icon" type="image/png" href="@routes.Assets.at("images/favicon.png")">
@@ -27,6 +27,12 @@
             bgcolor: #0000FF;
             width=20px;
             height=8px;
+        }
+        .centered-table {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
         }
     </style>
 </head>
@@ -56,13 +62,20 @@
                         Heartbeat:
                         <input id="chronosFrequency" type="text">
                         </li>
-                        <button type="submit" class="btn btn-lg btn-primary">Start simulation</button>
                         </ul>
+                        <div class="text-center">
+                            <button type="submit" class="btn btn-lg btn-primary">Start simulation</button>
+                        </div>
                     </form>
                 </div>
     </div>
-    <div id="watorGrid">
+    <div id="watorGrid" class="centered-table" style="display:none;">
+        <div id="table" >
 
+        </div>
+        <div class="text-center" style="margin-top:10px">
+            <button type="button" id="stop-simulation" class="btn btn-danger">Stop simulation</button>
+        </div>
     </div>
 </body>
 </html>

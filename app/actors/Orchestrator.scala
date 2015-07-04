@@ -3,7 +3,7 @@ package actors
 import java.util.concurrent.TimeUnit
 
 import actors.Fish.Tick
-import actors.Orchestrator.StartSimulation
+import actors.Orchestrator.{StopSimulation, StartSimulation}
 import actors.fsm.Cell
 import actors.fsm.Cell.Fill
 import akka.actor._
@@ -54,12 +54,18 @@ class Orchestrator extends Actor with ActorLogging {
   override def receive: Receive = {
     case StartSimulation(params: SimulationParameters, channelOut: ActorRef) =>
       this.channelOut = channelOut
+      log.info(s"Starting simulation with params: $params")
       startSimulation(params, channelOut)
 
     case Tick =>
       val children: Iterable[ActorRef] = context.children
       log.info(s"Broadcasting Tick message to all ${children.size} my children")
       children foreach (_ ! Tick)
+
+    case StopSimulation =>
+      log.info("Terminating simulation")
+      context.children.foreach(_ ! PoisonPill)
+      simulationStarted = false
 
     case unknown => log.debug(s"Unknown message received: $unknown")
   }
@@ -71,6 +77,8 @@ object Orchestrator {
   case class StartSimulation(params: SimulationParameters, channelOut: ActorRef)
 
   sealed trait StatusUpdate
+
+  case object StopSimulation
 
   case object NoUpdate extends StatusUpdate
 

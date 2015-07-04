@@ -1,6 +1,6 @@
 package controllers
 
-import actors.Orchestrator.StartSimulation
+import actors.Orchestrator.{StopSimulation, StartSimulation}
 import akka.actor._
 import play.api.Play.current
 import play.api.libs.concurrent.Akka
@@ -32,7 +32,7 @@ object SimulationParameters {
 
 class WSHandler(out: ActorRef) extends Actor with ActorLogging {
   def receive = {
-    case wsRequest: JsValue =>
+    case wsRequest: JsValue if wsRequest.validate[SimulationParameters].isSuccess =>
       wsRequest.validate[SimulationParameters].asOpt.fold(
         out ! Json.obj("status" -> "KO")
       ){ paramters =>
@@ -41,7 +41,8 @@ class WSHandler(out: ActorRef) extends Actor with ActorLogging {
       out ! Json.obj("status" -> "OK")
       }
 
-
+    case stopRequest: JsValue if ((stopRequest \ "stop").asOpt[Boolean]).isDefined =>
+      Akka.system.actorSelection("/user/orchestrator") ! StopSimulation
 
     case _ => log.info("No SHIT!")
   }
