@@ -3,12 +3,14 @@ package actors.fsm
 import java.util.concurrent.TimeUnit
 
 import actors.Fish.Tick
-import actors.fsm.Cell.{Fill, Ko, Ok}
+import actors.fsm.Cell._
 import akka.actor._
 import akka.pattern.ask
 import model._
 import play.api.libs.json.Json
 
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
 import scala.util.{Random, Try}
 
 
@@ -31,11 +33,11 @@ trait PositiveRandomNumberGen {
 
 /**
  *
- * This actor will represent a single cell of the wator planet.
- * Actor paths will embed <rowIdx, columnIdx> so that each actor can indeed talk to its neighbours.
+ * This actor represents a single cell of the wator planet.
+ * Actor paths will embed <rowIdx, columnIdx> so that each actor can talk to its neighbours.
  * Cell is a FSM with three possible states: fish, shark and water. Each time
  * a cell actor transits from one state to the other it will advertise its new state to its neighbours; therefore,
- * every cell actor will now in what state its neighbours are. This information will be used to calculate the next move.
+ * every cell actor will know in what state its neighbours are. This information will be used to calculate the next move.
  *
  */
 class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef], val heartBeatFrequency: Int = 1000) extends Actor
@@ -100,13 +102,12 @@ with ActorLogging with PositiveRandomNumberGen with HeartBeat {
     case Fill(Shark) =>
       log.info(s"Fish $position has just been eaten")
       becomeShark
-      advertiseStateToNeighbours(Shark)
       sender ! Ok
     case msg => log.info(s"Fish cell has no behaviour defined for message $msg")
   }
 
   def shark: Receive = tickAndReceiveNeighboursUpdatesAs(Shark) orElse {
-    case Fill(Fish | Shark) => sender ! Ko
+    case Fill(_) => sender ! Ko
     case msg => log.info(s"Shark cell has no behaviour defined for message $msg")
   }
 
@@ -119,7 +120,7 @@ with ActorLogging with PositiveRandomNumberGen with HeartBeat {
 
   private[fsm] def tickAs(cellContent: CellContent): Unit = cellContent match {
     case Fish => availableEmptyCell map { direction =>
-      neighboursRefs(direction) ? Fill(Fish) onSuccess {
+      Await.result(neighboursRefs(direction) ? Fill(Fish), Duration(3000, TimeUnit.MILLISECONDS)) match {
         case Ok =>
           log.info(s"Fish moved from ${this.position} to $direction")
           becomeWater
@@ -131,7 +132,7 @@ with ActorLogging with PositiveRandomNumberGen with HeartBeat {
     }
 
     case Shark => (availableFishCell orElse availableEmptyCell) map { direction =>
-      neighboursRefs(direction) ? Fill(Shark) onSuccess {
+        Await.result(neighboursRefs(direction) ? Fill(Shark), Duration(3000, TimeUnit.MILLISECONDS)) match {
         case Ok =>
           log.info(s"Shark moved from ${this.position} to $direction")
           becomeWater
