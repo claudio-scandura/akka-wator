@@ -55,6 +55,8 @@ with ActorLogging with PositiveRandomNumberGen with HeartBeat {
 
   private final val PositionRegex = """.*(\d+)-(\d+)""".r
 
+  var kicker: Cancellable = null
+
   private[fsm] lazy val neighboursRefs: Map[Direction, ActorSelection] = neighbours.toMap map {
     case (direction, _) => (direction -> actorRefFor(Direction.neighbourPositionFromDirection(position, direction)))
   }
@@ -82,6 +84,29 @@ with ActorLogging with PositiveRandomNumberGen with HeartBeat {
     become(water)
     advertiseStateToNeighbours(Water)
     notifyNewPosition("water")
+  }
+
+  def fishInTransit: Receive = {
+    case Ok =>
+      kicker.cancel()
+      becomeWater
+    case Ko =>
+      kicker.cancel()
+      become(fish)
+    case Kick => become(fish)
+    case _ => Ko
+  }
+
+
+  def sharkInTransit: Receive = {
+    case Ok =>
+      becomeWater
+      kicker.cancel()
+    case Ko =>
+      become(shark)
+      kicker.cancel()
+    case Kick => become(shark)
+    case _ => Ko
   }
 
   def water: Receive = tickAndReceiveNeighboursUpdatesAs(Water) orElse {
@@ -120,25 +145,31 @@ with ActorLogging with PositiveRandomNumberGen with HeartBeat {
 
   private[fsm] def tickAs(cellContent: CellContent): Unit = cellContent match {
     case Fish => availableEmptyCell map { direction =>
-      Await.result(neighboursRefs(direction) ? Fill(Fish), Duration(3000, TimeUnit.MILLISECONDS)) match {
-        case Ok =>
-          log.info(s"Fish moved from ${this.position} to $direction")
-          becomeWater
-        case msg =>
-          log.info(s"Failed to move fish from ${this.position} to $direction. Result was $msg")
-      }
+      become(fishInTransit)
+      neighboursRefs(direction) ! Fill(Fish)
+      registerKick
+//      Await.result(neighboursRefs(direction) ? Fill(Fish), Duration(3000, TimeUnit.MILLISECONDS)) match {
+//        case Ok =>
+//          log.info(s"Fish moved from ${this.position} to $direction")
+//          becomeWater
+//        case msg =>
+//          log.info(s"Failed to move fish from ${this.position} to $direction. Result was $msg")
+//      }
     } getOrElse {
       log.info(s"No available positions around $position. Fish is staying here")
     }
 
     case Shark => (availableFishCell orElse availableEmptyCell) map { direction =>
-        Await.result(neighboursRefs(direction) ? Fill(Shark), Duration(3000, TimeUnit.MILLISECONDS)) match {
-        case Ok =>
-          log.info(s"Shark moved from ${this.position} to $direction")
-          becomeWater
-        case msg =>
-          log.info(s"Failed to move Shark from ${this.position} to $direction. Result was $msg")
-      }
+      become(sharkInTransit)
+      neighboursRefs(direction) ! Fill(Shark)
+      registerKick
+//      Await.result(neighboursRefs(direction) ? Fill(Shark), Duration(3000, TimeUnit.MILLISECONDS)) match {
+//        case Ok =>
+//          log.info(s"Shark moved from ${this.position} to $direction")
+//          becomeWater
+//        case msg =>
+//          log.info(s"Failed to move Shark from ${this.position} to $direction. Result was $msg")
+//      }
     } getOrElse {
       log.info(s"No available positions around $position. Shark is staying here")
     }
@@ -186,4 +217,11 @@ with ActorLogging with PositiveRandomNumberGen with HeartBeat {
     )
   }
 
+  def registerKick = {
+    kicker = context.system.scheduler.scheduleOnce(
+      Duration(1, TimeUnit.SECONDS),
+      self,
+      Kick
+    )
+  }
 }
