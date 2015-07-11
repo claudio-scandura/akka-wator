@@ -9,9 +9,7 @@ import akka.pattern.ask
 import model._
 import play.api.libs.json.Json
 
-import scala.concurrent.Await
-import scala.concurrent.duration.Duration
-import scala.util.{Random, Try}
+import scala.util.{Random, Success, Try}
 
 
 object Cell {
@@ -22,7 +20,7 @@ object Cell {
 
   case object Ko
 
-  case object Kick
+  case object Kick  
 
 }
 
@@ -118,26 +116,35 @@ with ActorLogging with PositiveRandomNumberGen with HeartBeat {
 
   override def receive: Receive = water
 
+  def dormant: Receive = {
+    case neighbourStatusUpdate: CellContent => updateNeighbourState(neighbourStatusUpdate, sender)
+    case other => log.info(s"Cell is dormant and will not react to message: $other")
+  }
+
   private[fsm] def tickAs(cellContent: CellContent): Unit = cellContent match {
     case Fish => availableEmptyCell map { direction =>
-      Await.result(neighboursRefs(direction) ? Fill(Fish), Duration(3000, TimeUnit.MILLISECONDS)) match {
-        case Ok =>
+      become(dormant)
+      (neighboursRefs(direction) ? Fill(Fish)) onComplete {
+        case Success(Ok) =>
           log.info(s"Fish moved from ${this.position} to $direction")
           becomeWater
         case msg =>
           log.info(s"Failed to move fish from ${this.position} to $direction. Result was $msg")
+          become(fish)
       }
     } getOrElse {
       log.info(s"No available positions around $position. Fish is staying here")
     }
 
     case Shark => (availableFishCell orElse availableEmptyCell) map { direction =>
-        Await.result(neighboursRefs(direction) ? Fill(Shark), Duration(3000, TimeUnit.MILLISECONDS)) match {
-        case Ok =>
+      become(dormant)
+      (neighboursRefs(direction) ? Fill(Shark)) onComplete {
+        case Success(Ok) =>
           log.info(s"Shark moved from ${this.position} to $direction")
           becomeWater
         case msg =>
           log.info(s"Failed to move Shark from ${this.position} to $direction. Result was $msg")
+          become(shark)
       }
     } getOrElse {
       log.info(s"No available positions around $position. Shark is staying here")

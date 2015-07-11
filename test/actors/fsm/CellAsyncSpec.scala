@@ -77,8 +77,11 @@ class CellAsyncSpec extends TestKit(ActorSystem("TestWatorSystem")) with WordSpe
 
     def startAndStopCell(testBody: => Unit): Unit = {
       cell.start()
-      testBody
-      cell.stop()
+      try {
+        testBody
+      } finally {
+        cell.stop()
+      }
     }
   }
 
@@ -164,7 +167,22 @@ class CellAsyncSpec extends TestKit(ActorSystem("TestWatorSystem")) with WordSpe
           neighbourProbe.expectMsg[CellContent](Water)
         }
       }
+    }
 
+    "spawn a new fish if there is an empty neighbour cell" when {
+
+      "receiving a Tick message" ignore new Setup {
+        override val initialState: CellContent = Fish
+        //setup fish as ready to spawn a new fish
+        startAndStopCell {
+          cell ! Tick
+          neighbourProbe.expectMsg(Fill(Fish))
+          neighbourProbe.reply(Ok)
+
+          wsOutProbe.expectNoMsg(maxDuration)
+          neighbourProbe.expectNoMsg(maxDuration)
+        }
+      }
     }
 
     "do nothing" when {
