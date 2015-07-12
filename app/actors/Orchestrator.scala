@@ -44,8 +44,8 @@ class Orchestrator extends Actor with ActorLogging {
     val fish = (1 to params.fishPopulation) map (_ => 'Fish)
     val sharkAndFishShuffled = Random.shuffle(sharks ++ fish)
     sharkAndFishShuffled foreach {
-      case 'Shark => actorRefFor(randomPositions.dequeue()) ! Fill(FSMShark)
-      case 'Fish => actorRefFor(randomPositions.dequeue()) ! Fill(FSMFish)
+      case 'Shark => actorRefFor(randomPositions.dequeue()) ! Fill(FSMShark())
+      case 'Fish => actorRefFor(randomPositions.dequeue()) ! Fill(FSMFish())
       case _ => Unit
     }
 

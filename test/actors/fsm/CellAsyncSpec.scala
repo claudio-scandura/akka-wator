@@ -40,7 +40,13 @@ class CellAsyncSpec extends TestKit(ActorSystem("TestWatorSystem")) with WordSpe
     val wsOutProbe = TestProbe()
     val neighbourProbe = TestProbe()
 
-    class CellForTest(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef], neighbourProbeSelection: ActorSelection, initialState: CellContent) extends Cell(position, rows, columns, wsOut) {
+    val sharkStarvation: SharkStarvation = SharkStarvation(10)
+    val sharkReproduction: SharkReproduction = SharkReproduction(5)
+    val fishReproduction: FishReproduction = FishReproduction(3)
+
+    lazy val lifeDeathParams = LifeDeathParameters(sharkStarvation, sharkReproduction, fishReproduction)
+
+    class CellForTest(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef], neighbourProbeSelection: ActorSelection, initialState: CellContent) extends Cell(position, rows, columns, wsOut, lifeDeathParams = lifeDeathParams) {
       import scala.collection.mutable.{Map => MutableMap}
 
       override def nextRandomNumber(range: Range): Int = stubRandomNumber
@@ -65,10 +71,13 @@ class CellAsyncSpec extends TestKit(ActorSystem("TestWatorSystem")) with WordSpe
         )
       }
 
+
+      content = initialState
+
       override def receive: Receive = initialState match {
         case Water => super.water
-        case Fish => super.fish
-        case Shark => super.shark
+        case f: Fish => super.fish
+        case s: Shark => super.shark
         case other => fail(s"invalid initial state for Cell: $other")
       }
     }
@@ -91,25 +100,25 @@ class CellAsyncSpec extends TestKit(ActorSystem("TestWatorSystem")) with WordSpe
 
       "receiving a Fill(shark) message" in new Setup {
         startAndStopCell {
-          (cell ? Fill(Shark)).futureValue shouldBe Ok
+          (cell ? Fill(Shark())).futureValue shouldBe Ok
 
           val result = wsOutProbe.expectMsgAnyClassOf(classOf[JsObject])
           (result \ "animal").as[String] shouldBe "shark"
           (result \ "position").as[Position] shouldBe position
 
-          neighbourProbe.expectMsg[CellContent](Shark)
+          neighbourProbe.expectMsg[CellContent](Shark())
         }
       }
 
       "receiving a Fill(Fish)" in new Setup {
         startAndStopCell {
-          (cell ? Fill(Fish)).futureValue shouldBe Ok
+          (cell ? Fill(Fish())).futureValue shouldBe Ok
 
           val result = wsOutProbe.expectMsgAnyClassOf(classOf[JsObject])
           (result \ "animal").as[String] shouldBe "fish"
           (result \ "position").as[Position] shouldBe position
 
-          neighbourProbe.expectMsg[CellContent](Fish)
+          neighbourProbe.expectMsg[CellContent](Fish())
         }
       }
     }
@@ -119,6 +128,16 @@ class CellAsyncSpec extends TestKit(ActorSystem("TestWatorSystem")) with WordSpe
       "receiving a Tick message " in new Setup {
         startAndStopCell {
           cell ! Tick
+          wsOutProbe.expectNoMsg(maxDuration)
+
+          neighbourProbe.expectNoMsg(maxDuration)
+        }
+      }
+
+      "receiving a Fill(shark) message but the shark has starved" in new Setup {
+        startAndStopCell {
+          cell ! Fill(Shark(2, sharkStarvation.afterTicks + 1))
+
           wsOutProbe.expectNoMsg(maxDuration)
 
           neighbourProbe.expectNoMsg(maxDuration)
@@ -141,23 +160,37 @@ class CellAsyncSpec extends TestKit(ActorSystem("TestWatorSystem")) with WordSpe
     "send a notificationMessage to the UI actor and advertise the new state to the neigbhours" when {
 
       "receiving a Fill(shark) message" in new Setup {
-        override val initialState: CellContent = Fish
+        override val initialState: CellContent = Fish()
         startAndStopCell {
-          (cell ? Fill(Shark)).futureValue shouldBe Ok
+          (cell ? Fill(Shark())).futureValue shouldBe Ok
 
           val result = wsOutProbe.expectMsgAnyClassOf(classOf[JsObject])
           (result \ "animal").as[String] shouldBe "shark"
           (result \ "position").as[Position] shouldBe position
 
-          neighbourProbe.expectMsg[CellContent](Shark)
+          neighbourProbe.expectMsg[CellContent](Shark())
         }
       }
 
+      "receiving a Fill(shark) message and the shark is starving" in new Setup {
+        override val initialState: CellContent = Fish()
+        startAndStopCell {
+          (cell ? Fill(Shark(1, sharkStarvation.afterTicks + 1))).futureValue shouldBe Ok
+
+          val result = wsOutProbe.expectMsgAnyClassOf(classOf[JsObject])
+          (result \ "animal").as[String] shouldBe "shark"
+          (result \ "position").as[Position] shouldBe position
+
+          neighbourProbe.expectMsg[CellContent](Shark())
+        }
+      }
+
+
       "receiving a Tick message which results in a transition of the fish in another cell" in new Setup {
-        override val initialState: CellContent = Fish
+        override val initialState: CellContent = Fish(1)
         startAndStopCell {
           cell ! Tick
-          neighbourProbe.expectMsg(Fill(Fish))
+          neighbourProbe.expectMsg(Fill(Fish(2)))
           neighbourProbe.reply(Ok)
 
           val result = wsOutProbe.expectMsgAnyClassOf(classOf[JsObject])
@@ -171,12 +204,11 @@ class CellAsyncSpec extends TestKit(ActorSystem("TestWatorSystem")) with WordSpe
 
     "spawn a new fish if there is an empty neighbour cell" when {
 
-      "receiving a Tick message" ignore new Setup {
-        override val initialState: CellContent = Fish
-        //setup fish as ready to spawn a new fish
+      "receiving a Tick message" in new Setup {
+        override val initialState: CellContent = Fish(fishReproduction.afterTicks)
         startAndStopCell {
           cell ! Tick
-          neighbourProbe.expectMsg(Fill(Fish))
+          neighbourProbe.expectMsg(Fill(Fish()))
           neighbourProbe.reply(Ok)
 
           wsOutProbe.expectNoMsg(maxDuration)
@@ -188,10 +220,10 @@ class CellAsyncSpec extends TestKit(ActorSystem("TestWatorSystem")) with WordSpe
     "do nothing" when {
 
       "receiving a Tick message which does not result in a transition of the fish in another cell because it has already been taken" in new Setup {
-        override val initialState: CellContent = Fish
+        override val initialState: CellContent = Fish(1)
         startAndStopCell {
           cell ! Tick
-          neighbourProbe.expectMsg(Fill(Fish))
+          neighbourProbe.expectMsg(Fill(Fish(2)))
           neighbourProbe.reply(Ko)
 
           wsOutProbe.expectNoMsg(maxDuration)
@@ -201,11 +233,27 @@ class CellAsyncSpec extends TestKit(ActorSystem("TestWatorSystem")) with WordSpe
       }
 
       "receiving a Tick message which does not result in a transition of the fish in another cell because there is none available" in new Setup {
-        override val initialState: CellContent = Fish
-        override val northState: CellContent = Fish
-        override val eastState: CellContent = Shark
-        override val southState: CellContent = Fish
-        override val westState: CellContent = Shark
+        override val initialState: CellContent = Fish()
+        override val northState: CellContent = Fish()
+        override val eastState: CellContent = Shark()
+        override val southState: CellContent = Fish()
+        override val westState: CellContent = Shark()
+
+        startAndStopCell {
+          cell ! Tick
+
+          wsOutProbe.expectNoMsg(maxDuration)
+
+          neighbourProbe.expectNoMsg(maxDuration)
+        }
+      }
+
+      "receiving a Tick message which does not result in a new fish being spawned because there is no cell available" in new Setup {
+        override val initialState: CellContent = Fish(fishReproduction.afterTicks)
+        override val northState: CellContent = Fish()
+        override val eastState: CellContent = Shark()
+        override val southState: CellContent = Fish()
+        override val westState: CellContent = Shark()
 
         startAndStopCell {
           cell ! Tick
@@ -219,11 +267,11 @@ class CellAsyncSpec extends TestKit(ActorSystem("TestWatorSystem")) with WordSpe
 
     "respond Ko and not send other messages" when {
 
-      "receiving a Fill(Fish) message" in  new Setup {
-        override val initialState: CellContent = Fish
+      "receiving a Fill(Fish()) message" in  new Setup {
+        override val initialState: CellContent = Fish()
 
         startAndStopCell {
-          (cell ? Fill(Fish)).futureValue shouldBe Ko
+          (cell ? Fill(Fish())).futureValue shouldBe Ko
 
           wsOutProbe.expectNoMsg(maxDuration)
 
@@ -238,16 +286,16 @@ class CellAsyncSpec extends TestKit(ActorSystem("TestWatorSystem")) with WordSpe
 
     "send a notificationMessage to the UI actor and advertise the new state to the neigbhours" when {
 
-      "receiving a Tick message which results in a transition of the Shark in another cell as there is no fish around and one free cell" in new Setup {
-        override val initialState: CellContent = Shark
-        override val northState: CellContent = Shark
-        override val eastState: CellContent = Shark
+      "receiving a Tick message which results in a transition of the Shark() in another cell as there is no fish around and one free cell" in new Setup {
+        override val initialState: CellContent = Shark(1, 1)
+        override val northState: CellContent = Shark()
+        override val eastState: CellContent = Shark()
         override val southState: CellContent = Water
-        override val westState: CellContent = Shark
+        override val westState: CellContent = Shark()
 
         startAndStopCell {
           cell ! Tick
-          neighbourProbe.expectMsg(Fill(Shark))
+          neighbourProbe.expectMsg(Fill(Shark(2, 2)))
           neighbourProbe.reply(Ok)
 
           val result = wsOutProbe.expectMsgAnyClassOf(classOf[JsObject])
@@ -258,17 +306,73 @@ class CellAsyncSpec extends TestKit(ActorSystem("TestWatorSystem")) with WordSpe
         }
       }
 
-      "receiving a Tick message which results in a transition of the Shark in another cell as there is a fish around" in new Setup {
-        override val initialState: CellContent = Shark
-        override val northState: CellContent = Shark
-        override val eastState: CellContent = Shark
-        override val southState: CellContent = Fish
-        override val westState: CellContent = Shark
+      "receiving a Tick message which results in a transition of the Shark() in another cell as there is a fish around" in new Setup {
+        override val initialState: CellContent = Shark(1, 1)
+        override val northState: CellContent = Shark()
+        override val eastState: CellContent = Shark()
+        override val southState: CellContent = Fish()
+        override val westState: CellContent = Shark()
 
         startAndStopCell {
           cell ! Tick
-          neighbourProbe.expectMsg(Fill(Shark))
+          neighbourProbe.expectMsg(Fill(Shark(2, 2)))
           neighbourProbe.reply(Ok)
+
+          val result = wsOutProbe.expectMsgAnyClassOf(classOf[JsObject])
+          (result \ "animal").as[String] shouldBe "water"
+          (result \ "position").as[Position] shouldBe position
+
+          neighbourProbe.expectMsg[CellContent](Water)
+        }
+      }
+
+      "receiving a Tick message which results in the shark dieing as it did not manage to eat nor to move anywhere and it starved" in new Setup {
+        override val initialState: CellContent = Shark(1, sharkStarvation.afterTicks - 1)
+        override val northState: CellContent = Shark()
+        override val eastState: CellContent = Shark()
+        override val southState: CellContent = Fish()
+        override val westState: CellContent = Shark()
+
+        startAndStopCell {
+          cell ! Tick
+          neighbourProbe.expectMsg(Fill(Shark(2, sharkStarvation.afterTicks)))
+          neighbourProbe.reply(Ko)
+
+          val result = wsOutProbe.expectMsgAnyClassOf(classOf[JsObject])
+          (result \ "animal").as[String] shouldBe "water"
+          (result \ "position").as[Position] shouldBe position
+
+          neighbourProbe.expectMsg[CellContent](Water)
+        }
+      }
+    }
+
+    "spawn a new shark if there is an empty neighbour cell" when {
+
+      "receiving a Tick message" in new Setup {
+        override val initialState: CellContent = Shark(sharkReproduction.afterTicks)
+        startAndStopCell {
+          cell ! Tick
+          neighbourProbe.expectMsg(Fill(Shark()))
+          neighbourProbe.reply(Ok)
+
+          wsOutProbe.expectNoMsg(maxDuration)
+          neighbourProbe.expectNoMsg(maxDuration)
+        }
+      }
+    }
+
+    "kill shark if it did not eat for a number of ticks equivalent to the limit and there is no fish around" when {
+
+      "receiving a Tick message" in new Setup {
+        override val initialState: CellContent = Shark(2, sharkStarvation.afterTicks)
+        override val northState: CellContent = Shark()
+        override val eastState: CellContent = Shark()
+        override val southState: CellContent = Water
+        override val westState: CellContent = Shark()
+
+        startAndStopCell {
+          cell ! Tick
 
           val result = wsOutProbe.expectMsgAnyClassOf(classOf[JsObject])
           (result \ "animal").as[String] shouldBe "water"
@@ -282,10 +386,10 @@ class CellAsyncSpec extends TestKit(ActorSystem("TestWatorSystem")) with WordSpe
     "do nothing" when {
 
       "receiving a Tick message which does not result in a transition of the shark in another cell because it has already been taken" in new Setup {
-        override val initialState: CellContent = Shark
+        override val initialState: CellContent = Shark(1, 1)
         startAndStopCell {
           cell ! Tick
-          neighbourProbe.expectMsg(Fill(Shark))
+          neighbourProbe.expectMsg(Fill(Shark(2, 2)))
           neighbourProbe.reply(Ko)
 
           wsOutProbe.expectNoMsg(maxDuration)
@@ -295,11 +399,11 @@ class CellAsyncSpec extends TestKit(ActorSystem("TestWatorSystem")) with WordSpe
       }
 
       "receiving a Tick message which does not result in a transition of the shark in another cell because all the surrounding cells are occupied by sharks" in new Setup {
-        override val initialState: CellContent = Shark
-        override val northState: CellContent = Shark
-        override val eastState: CellContent = Shark
-        override val southState: CellContent = Shark
-        override val westState: CellContent = Shark
+        override val initialState: CellContent = Shark()
+        override val northState: CellContent = Shark()
+        override val eastState: CellContent = Shark()
+        override val southState: CellContent = Shark()
+        override val westState: CellContent = Shark()
           startAndStopCell {
             cell ! Tick
 
@@ -308,15 +412,31 @@ class CellAsyncSpec extends TestKit(ActorSystem("TestWatorSystem")) with WordSpe
             neighbourProbe.expectNoMsg(maxDuration)
           }
       }
+
+      "receiving a Tick message which does not result in a new shark being spawned because there is no cell available" in new Setup {
+        override val initialState: CellContent = Fish(sharkReproduction.afterTicks)
+        override val northState: CellContent = Shark()
+        override val eastState: CellContent = Shark()
+        override val southState: CellContent = Shark()
+        override val westState: CellContent = Shark()
+
+        startAndStopCell {
+          cell ! Tick
+
+          wsOutProbe.expectNoMsg(maxDuration)
+
+          neighbourProbe.expectNoMsg(maxDuration)
+        }
+      }
     }
 
       "respond Ko and not send other messages" when {
 
-      "receiving a Fill(Fish) message" in  new Setup {
-        override val initialState: CellContent = Shark
+      "receiving a Fill(Fish()) message" in  new Setup {
+        override val initialState: CellContent = Shark()
 
         startAndStopCell {
-          (cell ? Fill(Fish)).futureValue shouldBe Ko
+          (cell ? Fill(Fish())).futureValue shouldBe Ko
 
           wsOutProbe.expectNoMsg(maxDuration)
 
@@ -324,11 +444,11 @@ class CellAsyncSpec extends TestKit(ActorSystem("TestWatorSystem")) with WordSpe
         }
       }
 
-      "receiving a Fill(Shark) message" in  new Setup {
-        override val initialState: CellContent = Shark
+      "receiving a Fill(Shark()) message" in  new Setup {
+        override val initialState: CellContent = Shark()
 
         startAndStopCell {
-          (cell ? Fill(Shark)).futureValue shouldBe Ko
+          (cell ? Fill(Shark())).futureValue shouldBe Ko
 
           wsOutProbe.expectNoMsg(maxDuration)
 

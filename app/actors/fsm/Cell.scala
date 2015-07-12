@@ -20,7 +20,7 @@ object Cell {
 
   case object Ko
 
-  case object Kick  
+  case object Kick
 
 }
 
@@ -38,7 +38,7 @@ trait PositiveRandomNumberGen {
  * every cell actor will know in what state its neighbours are. This information will be used to calculate the next move.
  *
  */
-class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef], val heartBeatFrequency: Int = 1000) extends Actor
+class Cell(position: Position, rows: Int, columns: Int, wsOut: Option[ActorRef], val heartBeatFrequency: Int = 1000, lifeDeathParams: LifeDeathParameters = LifeDeathParameters.default) extends Actor
 with ActorLogging with PositiveRandomNumberGen with HeartBeat {
 
   implicit val timeout = akka.util.Timeout(2000, TimeUnit.MILLISECONDS)
@@ -57,6 +57,12 @@ with ActorLogging with PositiveRandomNumberGen with HeartBeat {
     case (direction, _) => (direction -> actorRefFor(Direction.neighbourPositionFromDirection(position, direction)))
   }
 
+  private[fsm] var content: CellContent = Water
+
+  var sharkStarvation: SharkStarvation = lifeDeathParams.sharkStarvation
+  var sharkReproduction: SharkReproduction = lifeDeathParams.sharkReproduction
+  var fishReproduction: FishReproduction = lifeDeathParams.fishReproduction
+
   startHeartBeat
 
   import context._
@@ -65,14 +71,14 @@ with ActorLogging with PositiveRandomNumberGen with HeartBeat {
     log.info("Becoming fish")
     become(fish)
     notifyNewPosition("fish")
-    advertiseStateToNeighbours(Fish)
+    advertiseStateToNeighbours(Fish())
   }
 
   private def becomeShark: Unit = {
     log.info("Becoming shark")
     become(shark)
     notifyNewPosition("shark")
-    advertiseStateToNeighbours(Shark)
+    advertiseStateToNeighbours(Shark())
   }
 
   private def becomeWater: Unit = {
@@ -82,11 +88,13 @@ with ActorLogging with PositiveRandomNumberGen with HeartBeat {
     notifyNewPosition("water")
   }
 
-  def water: Receive = tickAndReceiveNeighboursUpdatesAs(Water) orElse {
-    case Fill(Fish) =>
+  def water: Receive = tickAndReceiveNeighboursUpdates orElse {
+    case Fill(fish: Fish) =>
+      content = fish
       becomeFish
       sender ! Ok
-    case Fill(Shark) =>
+    case Fill(shark@Shark(_, didNoEatFor)) if didNoEatFor <= sharkStarvation.afterTicks =>
+      content = shark
       becomeShark
       sender ! Ok
     case msg =>
@@ -94,22 +102,23 @@ with ActorLogging with PositiveRandomNumberGen with HeartBeat {
       sender ! Ko
   }
 
-  def fish: Receive = tickAndReceiveNeighboursUpdatesAs(Fish) orElse {
-    case Fill(Fish) =>
+  def fish: Receive = tickAndReceiveNeighboursUpdates orElse {
+    case Fill(fish: Fish) =>
       sender ! Ko
-    case Fill(Shark) =>
+    case Fill(shark: Shark) =>
       log.info(s"Fish $position has just been eaten")
+      content = shark.copy(didNotEatFor = 1)
       becomeShark
       sender ! Ok
     case msg => log.info(s"Fish cell has no behaviour defined for message $msg")
   }
 
-  def shark: Receive = tickAndReceiveNeighboursUpdatesAs(Shark) orElse {
+  def shark: Receive = tickAndReceiveNeighboursUpdates orElse {
     case Fill(_) => sender ! Ko
     case msg => log.info(s"Shark cell has no behaviour defined for message $msg")
   }
 
-  def tickAndReceiveNeighboursUpdatesAs(content: CellContent): Receive = {
+  def tickAndReceiveNeighboursUpdates: Receive = {
     case Tick => tickAs(content)
     case neighbourStatusUpdate: CellContent => updateNeighbourState(neighbourStatusUpdate, sender)
   }
@@ -121,36 +130,76 @@ with ActorLogging with PositiveRandomNumberGen with HeartBeat {
     case other => log.info(s"Cell is dormant and will not react to message: $other")
   }
 
-  private[fsm] def tickAs(cellContent: CellContent): Unit = cellContent match {
-    case Fish => availableEmptyCell map { direction =>
+  private[fsm] def tickAs: PartialFunction[CellContent, Unit] = tickAsFish orElse tickAsShark orElse {
+    case _ => log.info("Empty cell will not react to tick message")
+  }
+
+
+  val tickAsFish: PartialFunction[CellContent, Unit] = {
+    case thisFish@Fish(aliveFor) if aliveFor % fishReproduction.afterTicks == 0 =>
+      content = thisFish.copy(aliveFor = aliveFor + 1)
+      availableEmptyCell map { direction =>
+        neighboursRefs(direction) ! Fill(Fish())
+      } getOrElse {
+        log.info(s"No available positions around $position. New fish cannot be spawned")
+      }
+
+    case thisFish@Fish(aliveFor) => availableEmptyCell map { direction =>
       become(dormant)
-      (neighboursRefs(direction) ? Fill(Fish)) onComplete {
+      (neighboursRefs(direction) ? Fill(Fish(aliveFor + 1))) onComplete {
         case Success(Ok) =>
           log.info(s"Fish moved from ${this.position} to $direction")
+          content = Water
           becomeWater
         case msg =>
           log.info(s"Failed to move fish from ${this.position} to $direction. Result was $msg")
+          content = thisFish.copy(aliveFor = aliveFor + 1)
           become(fish)
       }
     } getOrElse {
       log.info(s"No available positions around $position. Fish is staying here")
     }
+  }
 
-    case Shark => (availableFishCell orElse availableEmptyCell) map { direction =>
+  val tickAsShark: PartialFunction[CellContent, Unit] = {
+    case Shark(aliveFor, didNotEatFor) if didNotEatFor >= sharkStarvation.afterTicks =>
+      content = Water
+      becomeWater
+      availableFishCell map { direction =>
+        neighboursRefs(direction) ! Fill(Shark(aliveFor + 1, didNotEatFor + 1))
+      }
+
+    //TODO: I don't like this..
+    case thisShark@Shark(aliveFor, didNotEatFor) if aliveFor % sharkReproduction.afterTicks == 0 =>
+      content = thisShark.copy(aliveFor + 1, didNotEatFor + 1)
+      availableEmptyCell map { direction =>
+        neighboursRefs(direction) ! Fill(Shark())
+      } getOrElse {
+        log.info(s"No available positions around $position. New shark cannot be spawned")
+      }
+
+    case thisShark@Shark(aliveFor, didNotEatFor) => (availableFishCell orElse availableEmptyCell) map { direction =>
       become(dormant)
-      (neighboursRefs(direction) ? Fill(Shark)) onComplete {
+      //TODO: now we need to check if shark's gonna eat or is just moving
+      (neighboursRefs(direction) ? Fill(Shark(aliveFor + 1, didNotEatFor + 1))) onComplete {
         case Success(Ok) =>
           log.info(s"Shark moved from ${this.position} to $direction")
+          content = Water
           becomeWater
         case msg =>
           log.info(s"Failed to move Shark from ${this.position} to $direction. Result was $msg")
-          become(shark)
+          if (didNotEatFor + 1 < sharkStarvation.afterTicks) {
+            content = thisShark.copy(aliveFor = aliveFor + 1, didNotEatFor = didNotEatFor + 1)
+            become(shark)
+          }
+          else {
+            content = Water
+            becomeWater
+          }
       }
     } getOrElse {
       log.info(s"No available positions around $position. Shark is staying here")
     }
-
-    case _ => log.info("Empty cell will not react to tick message")
   }
 
   private def availableEmptyCell: Option[Direction] = {
@@ -160,7 +209,7 @@ with ActorLogging with PositiveRandomNumberGen with HeartBeat {
 
   private def availableFishCell: Option[Direction] = {
     val fishCells = neighbours.filter {
-      case (pos, Fish) => true
+      case (pos, f: Fish) => true
       case _ => false
     }.keySet.toSeq
     if (fishCells.nonEmpty) Some(fishCells(nextRandomNumber(0 until fishCells.size))) else None
