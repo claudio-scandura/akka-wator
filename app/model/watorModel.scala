@@ -6,6 +6,8 @@ sealed trait CellContent {
 
 sealed trait Animal extends CellContent {
   override def isEmpty: Boolean = false
+
+  //TODO: aliveFor should be 'didNotReproduceFor' so we can use it similarly to 'didNotEatFor' and set it to zero when reproduction happens
   val aliveFor: Int
 }
 
